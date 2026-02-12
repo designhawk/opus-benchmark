@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OPUS-LLM-Benchmark Report</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .meta-item {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .meta-item label {
+            display: block;
+            color: #6c757d;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+        .meta-item .value {
+            display: block;
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #343a40;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            padding: 40px;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        .metric-card h3 {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+        .metric-card .value {
+            font-size: 3em;
+            font-weight: 700;
+        }
+        .metric-card .suffix {
+            font-size: 1em;
+            opacity: 0.8;
+        }
+        .charts-section {
+            padding: 40px;
+            background: #f8f9fa;
+        }
+        .charts-section h2 {
+            margin-bottom: 30px;
+            color: #343a40;
+        }
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .table-section {
+            padding: 40px;
+        }
+        .table-section h2 {
+            margin-bottom: 20px;
+            color: #343a40;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .footer {
+            background: #343a40;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+        @media (max-width: 768px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>OPUS-LLM-Benchmark Report</h1>
+            <p>Translation Quality Evaluation</p>
+        </div>
+
+        <div class="metadata">
+            <div class="meta-item">
+                <label>Model</label>
+                <span class="value">{{ model }}</span>
+            </div>
+            <div class="meta-item">
+                <label>Corpus</label>
+                <span class="value">{{ corpus }}</span>
+            </div>
+            <div class="meta-item">
+                <label>Language Pair</label>
+                <span class="value">{{ source }} → {{ target }}</span>
+            </div>
+            <div class="meta-item">
+                <label>Samples</label>
+                <span class="value">{{ num_samples }}</span>
+            </div>
+            <div class="meta-item">
+                <label>Timestamp</label>
+                <span class="value">{{ timestamp }}</span>
+            </div>
+            <div class="meta-item">
+                <label>Execution Time</label>
+                <span class="value">{{ execution_time }}</span>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3>BLEU Score</h3>
+                <div class="value">{{ "%.2f"|format(metrics.bleu) }}</div>
+                <div class="suffix">/ 100</div>
+            </div>
+            <div class="metric-card">
+                <h3>chrF++ Score</h3>
+                <div class="value">{{ "%.2f"|format(metrics.chrf) }}</div>
+                <div class="suffix">/ 100</div>
+            </div>
+            <div class="metric-card">
+                <h3>METEOR Score</h3>
+                <div class="value">{{ "%.2f"|format(metrics.meteor) }}</div>
+                <div class="suffix">/ 100</div>
+            </div>
+        </div>
+
+        <div class="charts-section">
+            <h2>Score Distributions</h2>
+            <div class="chart-container" id="charts"></div>
+        </div>
+
+        <div class="table-section">
+            <h2>Per-Sentence Results</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Source</th>
+                        <th>Reference</th>
+                        <th>Hypothesis</th>
+                        <th>BLEU</th>
+                        <th>chrF</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in sentences %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ item.source }}</td>
+                        <td>{{ item.reference }}</td>
+                        <td>{{ item.hypothesis }}</td>
+                        <td>{{ "%.2f"|format(item.bleu) }}</td>
+                        <td>{{ "%.2f"|format(item.chrf) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p>Generated by OPUS-LLM-Benchmark v0.1.0</p>
+        </div>
+    </div>
+</body>
+</html>
