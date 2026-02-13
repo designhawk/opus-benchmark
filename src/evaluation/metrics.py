@@ -190,7 +190,11 @@ class TranslationEvaluator:
     ) -> float:
         """Compute sentence-level METEOR."""
         try:
-            score = nltk_meteor_score(references, hypothesis)
+            # Tokenize references and hypothesis
+            ref_tokens = [r.split() for r in references]
+            hyp_tokens = hypothesis.split()
+            score = nltk_meteor_score(ref_tokens, hyp_tokens)
             return score * 100
-        except Exception:
+        except Exception as e:
+            logger.error(f"METEOR sentence failed: {e}")
             return 0.0
