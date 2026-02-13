@@ -242,6 +242,94 @@ def list_targets(source: str, data_dir: str):
     console.print(table)
 
 
+@list.command("duplicates")
+@click.option(
+    "--data-dir",
+    default="./data/tatoeba",
+    help="Directory containing parallel corpus files",
+)
+def list_duplicates(data_dir):
+    """Check for duplicate sentences in corpus files."""
+    import os
+    data_dir = str(data_dir)
+    
+    if not os.path.exists(data_dir):
+        console.print(f"[red]Directory not found: {data_dir}[/red]")
+        return
+
+    txt_files = [f for f in os.listdir(data_dir) if f.endswith('.txt')]
+    
+    if not txt_files:
+        console.print(f"[yellow]No .txt files found in {data_dir}[/yellow]")
+        return
+
+    table = Table(title="Duplicate Sentences Check")
+    table.add_column("File", style="cyan")
+    table.add_column("Languages", style="green")
+    table.add_column("Total", justify="right", style="yellow")
+    table.add_column("Unique", justify="right", style="green")
+    table.add_column("Duplicates", justify="right", style="red")
+
+    total_dupes = 0
+    total_unique = 0
+    total_sentences = 0
+
+    for filename in sorted(txt_files):
+        file_path = os.path.join(data_dir, filename)
+        
+        sources = set()
+        duplicates = 0
+        total = 0
+        
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    total += 1
+                    parts = line.strip().split("\t")
+                    if len(parts) >= 1:
+                        src = parts[0]
+                        if src in sources:
+                            duplicates += 1
+                        else:
+                            sources.add(src)
+
+        total_dupes += duplicates
+        total_unique += len(sources)
+        total_sentences += total
+
+        stem = os.path.splitext(filename)[0]
+        if "-" in stem:
+            parts = stem.split("-")
+            if len(parts) == 2:
+                src, tgt = parts
+                src_name = TARGET_LANGUAGES.get(src, {}).get("name", src.upper())
+                tgt_name = TARGET_LANGUAGES.get(tgt, {}).get("name", tgt.upper())
+                lang_pair = f"{src_name} -> {tgt_name}"
+            else:
+                lang_pair = stem
+        else:
+            lang_pair = stem
+
+        table.add_row(
+            filename,
+            lang_pair,
+            f"{total:,}",
+            f"{len(sources):,}",
+            f"{duplicates:,}",
+        )
+
+    table.add_row(
+        "",
+        "",
+        f"{total_sentences:,}",
+        f"{total_unique:,}",
+        f"{total_dupes:,}",
+        style="bold",
+    )
+
+    console.print(table)
+
+
 @list.command("files")
 @click.option(
     "--data-dir",
