@@ -34,12 +34,14 @@ class MultiReportGenerator:
 
         ranking_bleu = rankings.get("bleu", [])
         ranking_chrf = rankings.get("chrf", [])
+        ranking_meteor = rankings.get("meteor", [])
 
         html_content = self._generate_html(
             languages_data=languages_data,
             summary=summary,
             ranking_bleu=ranking_bleu,
             ranking_chrf=ranking_chrf,
+            ranking_meteor=ranking_meteor,
             model=model,
             samples=samples_per_lang,
             corpus=corpus,
@@ -59,6 +61,7 @@ class MultiReportGenerator:
         summary: Dict[str, Any],
         ranking_bleu: List[tuple],
         ranking_chrf: List[tuple],
+        ranking_meteor: List[tuple],
         model: str,
         samples: int,
         corpus: str,
@@ -70,12 +73,14 @@ class MultiReportGenerator:
         for i, (lang, bleu, samps) in enumerate(ranking_bleu, 1):
             lang_info = TARGET_LANGUAGES.get(lang, {"name": lang})
             chrf_score = next((l[1] for l in ranking_chrf if l[0] == lang), 0)
+            meteor_score = next((l[1] for l in ranking_meteor if l[0] == lang), 0)
             ranking_rows += f"""
             <tr>
                 <td>{i}</td>
                 <td><span class="lang-code">{lang.upper()}</span> {lang_info.get("name", lang)}</td>
                 <td class="score">{bleu:.1f}</td>
                 <td class="score">{chrf_score:.1f}</td>
+                <td class="score">{meteor_score:.1f}</td>
                 <td>{samps}</td>
             </tr>
             """
@@ -91,6 +96,7 @@ class MultiReportGenerator:
             for j, sent in enumerate(sentences[:samples], 1):
                 bleu = sent.get("bleu", 0)
                 chrf = sent.get("chrf", 0)
+                meteor = sent.get("meteor", 0)
                 src = sent.get("source", "")[:200]
                 ref = sent.get("reference", "")[:200]
                 hyp = sent.get("hypothesis", "")[:200]
@@ -99,7 +105,7 @@ class MultiReportGenerator:
                 <div class="sentence-pair">
                     <div class="sentence-header">
                         <span class="badge">{j}</span>
-                        <span class="metrics">BLEU: {bleu:.1f} | chrF: {chrf:.1f}</span>
+                        <span class="metrics">BLEU: {bleu:.1f} | chrF: {chrf:.1f} | METEOR: {meteor:.1f}</span>
                     </div>
                     <div class="sentence-content">
                         <div class="source"><strong>EN:</strong> {self._escape_html(src)}</div>
@@ -120,6 +126,10 @@ class MultiReportGenerator:
                     <div class="metric-card">
                         <div class="metric-value">{metrics.get("chrf", 0):.1f}</div>
                         <div class="metric-label">chrF++</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{metrics.get("meteor", 0):.1f}</div>
+                        <div class="metric-label">METEOR</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-value">{data.get("samples", 0)}</div>
@@ -405,6 +415,7 @@ class MultiReportGenerator:
                             <th>Language</th>
                             <th style="width: 100px;">BLEU</th>
                             <th style="width: 100px;">chrF++</th>
+                            <th style="width: 100px;">METEOR</th>
                             <th style="width: 100px;">Samples</th>
                         </tr>
                     </thead>

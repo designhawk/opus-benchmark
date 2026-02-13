@@ -730,7 +730,7 @@ def run_multi(
         )
 
         console.print(
-            f"  [green]Done: BLEU={metrics['bleu']:.1f}, chrF={metrics['chrf']:.1f}[/green]"
+            f"  [green]Done: BLEU={metrics['bleu']:.1f}, chrF={metrics['chrf']:.1f}, METEOR={metrics['meteor']:.1f}[/green]"
         )
 
     execution_time = time.time() - start_time
@@ -741,21 +741,26 @@ def run_multi(
     if all_results:
         total_bleu = sum(r["metrics"]["bleu"] for r in all_results)
         avg_bleu = total_bleu / len(all_results)
+        total_meteor = sum(r["metrics"].get("meteor", 0) for r in all_results)
+        avg_meteor = total_meteor / len(all_results)
 
         summary_table = Table(title="Summary")
         summary_table.add_column("Language", style="cyan")
         summary_table.add_column("BLEU", style="green")
         summary_table.add_column("chrF++", style="green")
+        summary_table.add_column("METEOR", style="green")
 
         for result in all_results:
             summary_table.add_row(
                 result["name"],
                 f"{result['metrics']['bleu']:.2f}",
                 f"{result['metrics']['chrf']:.2f}",
+                f"{result['metrics'].get('meteor', 0):.2f}",
             )
 
         console.print(summary_table)
         console.print(f"\n[cyan]Average BLEU: {avg_bleu:.2f}[/cyan]")
+        console.print(f"[cyan]Average METEOR: {avg_meteor:.2f}[/cyan]")
 
     # Generate report
     if output:
@@ -804,13 +809,18 @@ def run_multi(
         key=lambda x: x[1],
         reverse=True,
     )
+    meteor_ranking = sorted(
+        [(lang, d["metrics"].get("meteor", 0), d["samples"]) for lang, d in languages_data.items()],
+        key=lambda x: x[1],
+        reverse=True,
+    )
 
     report_gen = MultiReportGenerator()
     report_gen.generate(
         results={
             "results": languages_data,
             "summary": summary,
-            "rankings": {"bleu": bleu_ranking, "chrf": chrf_ranking},
+            "rankings": {"bleu": bleu_ranking, "chrf": chrf_ranking, "meteor": meteor_ranking},
         },
         output_file=output_file,
         model=model,
