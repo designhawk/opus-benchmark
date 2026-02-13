@@ -44,8 +44,7 @@ src/cache/
 cache/
 *.cache
 
-# Data
-data/tatoeba/*.txt
+# Data - keep ZIP files but not txt (can be regenerated)
 data/tatoeba/*.zip
 
 # Reports
