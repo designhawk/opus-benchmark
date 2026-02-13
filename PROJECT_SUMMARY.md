@@ -6,48 +6,49 @@ Multi-language translation benchmarking tool using OPUS parallel corpora and Ope
 ## Features Implemented
 
 ### 1. Multi-Language Support
-- **32 target languages** from English
-- Tatoeba corpus integration (sorted by sentence count)
-- Automatic duplicate removal
+- **30+ target languages** from English
+- Tatoeba corpus integration
+- Automatic duplicate removal during conversion
 - Random sentence sampling (not sequential)
 
-### 2. Download & Data Management
-- Parallel downloads (5 files simultaneously)
-- Resume support for interrupted downloads
-- Auto-deduplication on load
-- Tatoeba corpus prioritized (smallest first)
-
-### 3. Translation & Evaluation
+### 2. Translation & Evaluation
 - OpenRouter API integration (free tier support)
 - Rate limiting with automatic retry
 - BLEU, chrF++, METEOR metrics
 - Random sentence selection for unbiased evaluation
 
-### 4. Reporting
-- Vercel-inspired minimal HTML design
-- Side-by-side translation comparison
-- Quality badges (Excellent/Good/Fair/Poor)
-- Language rankings with gold/silver/bronze highlights
+### 3. Reporting
+- Interactive HTML reports with Plotly charts
+- Score distributions and correlations
+- Per-sentence results table
+- Language rankings (for multi-benchmark)
+- Auto-generated after each run
+
+### 4. CLI Commands
+- `convert` - Convert ZIP files to TXT format (with deduplication)
+- `list files` - Show corpus files with sizes and sentence counts
+- `list targets` - Show available target languages
+- `run` - Run single language benchmark
+- `run-multi` - Run multi-language benchmark
 
 ## Project Structure
 
 ```
 opus-benchmark/
 ├── src/
-│   ├── api/              # API clients (OpenRouter, OPUS)
+│   ├── api/              # API clients (OpenRouter)
 │   ├── cli/              # Command-line interface
 │   ├── config/           # Language configurations
-│   ├── data/             # Downloaders and data loaders
+│   ├── data/             # Data converters and loaders
 │   ├── evaluation/       # Metrics calculation
 │   ├── llm/              # Translation orchestration
-│   ├── reporting/        # HTML report generation
+│   ├── reporting/       # HTML report generation
 │   └── utils/            # Utility functions
 ├── data/
-│   └── tatoeba/          # Downloaded parallel corpora
+│   └── tatoeba/         # Parallel corpora files
 ├── reports/              # Generated HTML reports
 ├── templates/            # HTML templates
-├── tests/                # Test files
-├── .gitignore           # Git ignore rules
+├── .env                  # Environment variables (API key)
 ├── pyproject.toml       # Project configuration
 ├── requirements.txt     # Dependencies
 └── README.md            # Documentation
@@ -56,20 +57,20 @@ opus-benchmark/
 ## Key Commands
 
 ```bash
-# Download Tatoeba corpora
-python -m src.cli.main download tatoeba --langs de,fr,es
+# Convert ZIP files to TXT format (with deduplication)
+python -m src.cli.main convert
 
-# Download all 32 languages (smallest first)
-python -m src.cli.main download tatoeba --all
+# List corpus files
+python -m src.cli.main list files
+
+# List available targets
+python -m src.cli.main list targets
+
+# Run single language benchmark
+python -m src.cli.main run --target de --samples 10
 
 # Run multi-language benchmark
-python -m src.cli.main run-multi --langs de,fr,es --samples 10
-
-# Clean up duplicates
-python -m src.cli.main download cleanup
-
-# Check available commands
-python -m src.cli.main --help
+python -m src.cli.main run-multi --samples 10
 ```
 
 ## Configuration
@@ -77,14 +78,14 @@ python -m src.cli.main --help
 Create `.env` file:
 ```env
 OPENROUTER_API_KEY=your_api_key_here
+DEFAULT_MODEL=arcee-ai/trinity-large-preview:free
 ```
 
 ## Data Statistics
 
-After cleanup:
 - Total unique sentences: ~234,652
-- Duplicates removed: 332
 - Languages available: 5 (ar, bg, cs, da, de)
+- Files stored in: `data/tatoeba/`
 
 ## Technical Details
 
@@ -93,37 +94,29 @@ After cleanup:
 - Different samples each run
 - Prevents bias toward beginning of files
 
-### Auto-Deduplication
-- Removes duplicate sentence pairs automatically
-- Preserves first occurrence order
-- Runs on every file load
+### Duplicate Removal
+- Removes duplicate sentences during conversion
+- Based on exact source text match
+- Preserves first occurrence
 
 ### Rate Limiting
 - 1-second delay between API calls
 - Automatic retry on 429 errors
 - Exponential backoff
 
-## Files Removed During Cleanup
-- ✅ `download_wikimedia.py` (redundant)
-- ✅ `test_download.py` (temporary)
-- ✅ `__pycache__/` directories (Python cache)
-- ✅ `*.pyc` files (compiled Python)
-- ✅ `cache/*` (temporary cache files)
-
 ## Ready for Production
 
 All systems operational:
-- ✅ Imports working
 - ✅ CLI commands functional
-- ✅ Data loading with deduplication
+- ✅ Data conversion with deduplication
 - ✅ Random sampling implemented
 - ✅ HTML reports generating
-- ✅ Git ignore configured
+- ✅ Configuration via .env file
 
 ## Next Steps (Optional)
 
 1. Add more languages to `data/tatoeba/`
-2. Run full 32-language benchmark
+2. Run full benchmark across all languages
 3. Compare different models
 4. Export results to CSV/JSON
 

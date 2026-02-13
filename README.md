@@ -4,12 +4,13 @@ A CLI tool to benchmark LLM translations using local parallel corpora via OpenRo
 
 ## Features
 
-- **Multiple Language Support**: Translate from English to 32 target languages
-- **Flexible Model Selection**: Use OpenRouter's free router or select specific models
-- **Multiple Sample Sizes**: 10, 100, 500, or 1000 sentences
+- **Multiple Language Support**: Translate from English to 30+ target languages
+- **Flexible Model Selection**: Use OpenRouter's free models or select specific models
+- **Multiple Sample Sizes**: Configure any number of sentences
 - **Comprehensive Metrics**: BLEU, chrF++, and METEOR scoring
-- **Interactive Reports**: HTML reports with charts and visualizations
+- **Interactive Reports**: HTML reports with charts and visualizations (auto-generated after runs)
 - **Rich Terminal Output**: Real-time progress and results display
+- **Automatic Deduplication**: Duplicate sentences removed during conversion
 
 ## Installation
 
@@ -20,120 +21,112 @@ cd opus-benchmark
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Install the package
-pip install -e .
 ```
 
 ## Quick Start
 
-### Set your API key
+### Configure via .env file
+
+Create a `.env` file in the project root:
+
 ```bash
-export OPENROUTER_API_KEY=your_api_key_here
+# Required: OpenRouter API key
+OPENROUTER_API_KEY=your_api_key_here
 
-# Or set it interactively
-opus-benchmark config set-api-key
-
-# Python equivalent
-python -m src.cli.main config set-api-key
+# Optional: Default model (defaults to arcee-ai/trinity-large-preview:free)
+DEFAULT_MODEL=openai/gpt-4o-mini
 ```
 
+Get your API key from [https://openrouter.ai/](https://openrouter.ai/)
+
 ### Prepare your data
+
 ```bash
 # Drop ZIP files in data/tatoeba/
 # ZIP should contain: Tatoeba.cs-en.cs, Tatoeba.cs-en.en, etc.
 
-# Convert ZIP to TXT format
-opus-benchmark convert
-
-# Python equivalent
+# Convert ZIP to TXT format (also removes duplicates)
 python -m src.cli.main convert
 ```
 
 ### Run a benchmark
+
 ```bash
-# Run benchmark (uses data/tatoeba/en-de.txt)
-opus-benchmark run --target de
-
-# Multi-language benchmark (all pairs in data/tatoeba/)
-opus-benchmark run-multi
-
-# Python equivalents
+# Run single language benchmark
 python -m src.cli.main run --target de
+
+# Run multi-language benchmark (all pairs in data/tatoeba/)
 python -m src.cli.main run-multi
+
+# Specify custom model
+python -m src.cli.main run --target de --model openai/gpt-4o-mini
+
+# Specify sample size
+python -m src.cli.main run --target de --samples 100
+```
+
+### View available data
+
+```bash
+# List corpus files with sizes and sentence counts
+python -m src.cli.main list files
+
+# List available target languages
+python -m src.cli.main list targets
 ```
 
 ## Commands
 
-### Convert
-```bash
-# Convert ZIP files to parallel corpus format
-opus-benchmark convert
+### convert
 
-# Python equivalent
+Convert ZIP files to parallel corpus format. Automatically removes duplicate sentences.
+
+```bash
 python -m src.cli.main convert
 ```
 
-### Configuration
+### list
+
+List available resources.
+
 ```bash
-# Set API key
-opus-benchmark config set-api-key
+# Show corpus files with sizes and sentence counts
+python -m src.cli.main list files
 
-# View configuration
-opus-benchmark config show
-
-# Set default model
-opus-benchmark config set-model openai/gpt-4o-mini
-
-# Python equivalents
-python -m src.cli.main config set-api-key
-python -m src.cli.main config show
-python -m src.cli.main config set-model openai/gpt-4o-mini
+# Show available target languages
+python -m src.cli.main list targets
 ```
 
-### Benchmark
+### run
+
+Run a translation benchmark for a single language pair.
+
 ```bash
-# Run benchmark with options
-opus-benchmark run \
-    --target de \
-    --source en \
-    --samples 100 \
-    --model openrouter
-
-# Run all language pairs
-opus-benchmark run-multi
-
-# Python equivalents
-python -m src.cli.main run \
-    --target de \
-    --source en \
-    --samples 100 \
-    --model openrouter
-
-python -m src.cli.main run-multi
+python -m src.cli.main run --target de --samples 10
 ```
 
-### Reporting
+Options:
+- `--target` (required): Target language code (e.g., de, fr, ja)
+- `--samples`: Number of sentences (default: 10)
+- `--model`: OpenRouter model (default: arcee-ai/trinity-large-preview:free)
+- `--source`: Source language code (default: en)
+- `--data-dir`: Directory containing corpus files (default: ./data/tatoeba)
+
+### run-multi
+
+Run translation benchmarks across multiple languages.
+
 ```bash
-# Generate HTML report
-opus-benchmark report
-
-# Compare models
-opus-benchmark compare \
-    --model-a openrouter \
-    --model-b openai/gpt-4o-mini \
-    --pairs en-de en-fr \
-    --samples 10
-
-# Python equivalents
-python -m src.cli.main report
-
-python -m src.cli.main compare \
-    --model-a openrouter \
-    --model-b openai/gpt-4o-mini \
-    --pairs en-de en-fr \
-    --samples 10
+python -m src.cli.main run-multi --samples 10 --langs de,fr,es
 ```
+
+Options:
+- `--samples`: Samples per language (default: 10)
+- `--model`: OpenRouter model (default: arcee-ai/trinity-large-preview:free)
+- `--langs`: Comma-separated language codes (default: all available)
+- `--source`: Source language code (default: en)
+- `--data-dir`: Directory with corpus files (default: ./data/tatoeba)
+- `--output`: Output HTML file
 
 ## Supported Languages
 
@@ -151,7 +144,7 @@ Place ZIP files containing OPUS parallel corpora in `data/tatoeba/`. Each ZIP sh
 - `Tatoeba.langpair.source` (e.g., `Tatoeba.cs-en.cs`)
 - `Tatoeba.langpair.target` (e.g., `Tatoeba.cs-en.en`)
 
-The `convert` command transforms these into simple TXT files (one sentence per line) for benchmarking.
+The `convert` command transforms these into simple TXT files (one sentence per line) and removes duplicate sentences.
 
 ## Metrics
 
@@ -161,23 +154,38 @@ The `convert` command transforms these into simple TXT files (one sentence per l
 | chrF++ | 0-100 | Character n-gram F-score |
 | METEOR | 0-100 | Semantic similarity with synonym matching |
 
-## Sample Size Options
+## Reports
 
-| Size | Time (Free) | Use Case |
-|------|------------|----------|
-| 10 | ~30s | Smoke test |
-| 100 | ~5min | Development |
-| 500 | ~25min | Standard evaluation |
-| 1000 | ~50min | Full benchmark |
+HTML reports are automatically generated after each benchmark run and saved to the `reports/` directory.
 
-## Configuration
+- Single benchmark: `reports/benchmark_{source}-{target}_{corpus}_{timestamp}.html`
+- Multi benchmark: `reports/multi-benchmark_{timestamp}.html`
 
-Configuration is stored in `~/.config/opus-benchmark/config.yaml`:
+Reports include:
+- BLEU/chrF score distributions
+- Correlation charts
+- Per-sentence results table
+- Language rankings (for multi-benchmark)
 
-```yaml
-api_key: your_openrouter_api_key
-default_model: openrouter
+## Environment Variables
+
+Configure via `.env` file:
+
+```bash
+# Required
+OPENROUTER_API_KEY=your_api_key_here
+
+# Optional
+DEFAULT_MODEL=arcee-ai/trinity-large-preview:free
 ```
+
+## Sample Size & Time
+
+| Samples | Approx. Time (Free Model) |
+|---------|--------------------------|
+| 10 | ~30 seconds |
+| 50 | ~2 minutes |
+| 100 | ~5 minutes |
 
 ## License
 

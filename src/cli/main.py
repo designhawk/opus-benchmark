@@ -23,6 +23,7 @@ from utils.config import Config
 from llm.translator import LLMTranslator
 from evaluation.metrics import TranslationEvaluator
 from reporting.html_report import HTMLReportGenerator
+from reporting.multi_report import MultiReportGenerator
 from config.languages import TARGET_LANGUAGES, DEFAULT_LANGUAGES
 
 logging.basicConfig(level=logging.INFO)
@@ -200,86 +201,6 @@ def main():
 
 
 @main.group()
-def config():
-    """Configure application settings."""
-    pass
-
-
-@config.command("set-api-key")
-def set_api_key():
-    """Set OpenRouter API key."""
-    config = Config()
-    if not config.get_api_key():
-        console.print("Enter your OpenRouter API key:")
-        api_key = click.prompt("API Key", type=str, hide_input=True)
-        config.set_api_key(api_key)
-    else:
-        console.print("[yellow]API key already set[/yellow]")
-        if click.confirm("Do you want to update it?"):
-            api_key = click.prompt("New API Key", type=str, hide_input=True)
-            config.set_api_key(api_key)
-
-
-@config.command("show")
-def show_config():
-    """Show current configuration."""
-    config = Config()
-    config.show()
-
-
-@config.command("set-model")
-@click.argument("model", type=str)
-def set_default_model(model: str):
-    """Set default model."""
-    config = Config()
-    config.set_default_model(model)
-
-
-@config.command("use-free")
-def use_free_models():
-    """Switch to OpenRouter free tier models."""
-    config = Config()
-
-    console.print("[cyan]Switching to OpenRouter FREE tier...[/cyan]\n")
-
-    free_models = [
-        (
-            "arcee-ai/trinity-large-preview:free",
-            "Auto-select best free model (recommended)",
-        ),
-        ("google/gemma-3-27b-it:free", "Google Gemma 3 27B - Good for translation"),
-        ("qwen/qwen-2.5-72b-instruct:free", "Qwen 2.5 72B - Excellent multilingual"),
-        ("deepseek/deepseek-chat:free", "DeepSeek Chat - Strong reasoning"),
-        ("arcee-ai/trinity-large-preview:free", "Llama 3.3 70B - Reliable"),
-        ("nvidia/llama-3.1-nemotron-70b-instruct:free", "NVIDIA Nemotron 70B - Fast"),
-    ]
-
-    console.print("Available FREE models:")
-    console.print("=" * 60)
-    for i, (model_id, description) in enumerate(free_models, 1):
-        console.print(f"{i}. [cyan]{model_id}[/cyan]")
-        console.print(f"   {description}")
-        console.print()
-
-    choice = click.prompt("Select model (1-6)", type=int, default=1)
-
-    if 1 <= choice <= len(free_models):
-        selected_model = free_models[choice - 1][0]
-        config.set_default_model(selected_model)
-        console.print(f"[green]Default model set to: {selected_model}[/green]")
-        console.print("[dim]You can now run benchmarks without incurring costs![/dim]")
-    else:
-        console.print("[red]Invalid selection[/red]")
-
-
-@config.command("interactive")
-def interactive_setup():
-    """Run interactive configuration."""
-    config = Config()
-    config.interactive_setup()
-
-
-@main.group()
 def list():
     """List available resources."""
     pass
@@ -321,6 +242,92 @@ def list_targets(source: str, data_dir: str):
     console.print(table)
 
 
+@list.command("files")
+@click.option(
+    "--data-dir",
+    default="./data/tatoeba",
+    help="Directory containing parallel corpus files",
+)
+def list_files(data_dir):
+    """List corpus files with their sizes and sentence counts."""
+    import os
+    data_dir = str(data_dir)
+    
+    if not os.path.exists(data_dir):
+        console.print(f"[red]Directory not found: {data_dir}[/red]")
+        return
+
+    txt_files = [f for f in os.listdir(data_dir) if f.endswith('.txt')]
+    
+    if not txt_files:
+        console.print(f"[yellow]No .txt files found in {data_dir}[/yellow]")
+        return
+
+    table = Table(title="Corpus Files")
+    table.add_column("File", style="cyan")
+    table.add_column("Languages", style="green")
+    table.add_column("Sentences", justify="right", style="yellow")
+    table.add_column("Size", justify="right", style="magenta")
+
+    total_sentences = 0
+    total_size = 0
+
+    for filename in sorted(txt_files):
+        file_path = os.path.join(data_dir, filename)
+        stem = os.path.splitext(filename)[0]
+        
+        if "-" in stem:
+            parts = stem.split("-")
+            if len(parts) == 2:
+                src, tgt = parts
+                src_name = TARGET_LANGUAGES.get(src, {}).get("name", src.upper())
+                tgt_name = TARGET_LANGUAGES.get(tgt, {}).get("name", tgt.upper())
+                lang_pair = f"{src_name} -> {tgt_name}"
+            else:
+                lang_pair = stem
+        else:
+            lang_pair = stem
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                sentence_count = sum(1 for line in f if line.strip())
+        except Exception:
+            sentence_count = 0
+
+        size_bytes = os.path.getsize(file_path)
+        total_size += size_bytes
+        total_sentences += sentence_count
+
+        if size_bytes < 1024:
+            size_str = f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            size_str = f"{size_bytes / 1024:.1f} KB"
+        else:
+            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+
+        table.add_row(
+            filename,
+            lang_pair,
+            f"{sentence_count:,}",
+            size_str,
+        )
+
+    total_size_str = (
+        f"{total_size / (1024 * 1024):.1f} MB"
+        if total_size >= 1024 * 1024
+        else f"{total_size / 1024:.1f} KB"
+    )
+    table.add_row(
+        "",
+        "",
+        f"{total_sentences:,}",
+        total_size_str,
+        style="bold",
+    )
+
+    console.print(table)
+
+
 @main.command()
 @click.option(
     "--target",
@@ -336,7 +343,7 @@ def list_targets(source: str, data_dir: str):
 @click.option(
     "--model",
     default="arcee-ai/trinity-large-preview:free",
-    help="OpenRouter model",
+    help="OpenRouter model (default: arcee-ai/trinity-large-preview:free)",
 )
 @click.option(
     "--source",
@@ -394,55 +401,6 @@ def run(
         model=model,
         source=source,
     )
-
-
-@main.command()
-@click.option(
-    "--input",
-    help="Input results file or directory",
-)
-@click.option(
-    "--output",
-    help="Output HTML file",
-)
-def report(input: Optional[str], output: Optional[str]):
-    """Generate HTML report from results."""
-    if not input:
-        reports_dir = Path.cwd() / "reports"
-        if reports_dir.exists():
-            reports = list(reports_dir.glob("benchmark_*.html"))
-            if reports:
-                input = str(reports[-1])
-            else:
-                console.print("[red]No reports found in ./reports[/red]")
-                sys.exit(1)
-        else:
-            console.print("[red]No reports directory found[/red]")
-            sys.exit(1)
-
-    if output:
-        output_file = Path(output)
-    else:
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        output_file = Path.cwd() / "reports" / f"report_{timestamp}.html"
-
-    report_generator = HTMLReportGenerator()
-
-    if input.endswith(".json"):
-        with open(input) as f:
-            results = json.load(f)
-        report_file = report_generator.generate(results, str(output_file))
-    elif input.endswith(".html"):
-        console.print("[yellow]HTML report already exists, copying...[/yellow]")
-        import shutil
-
-        shutil.copy(input, output_file)
-        report_file = output_file
-    else:
-        console.print("[red]Unknown input format[/red]")
-        sys.exit(1)
-
-    console.print(f"[green]Report saved to: {report_file}[/green]")
 
 
 @main.command()
@@ -648,17 +606,58 @@ def run_multi(
         output_file = f"./reports/multi-benchmark_{timestamp}.html"
 
     # Build results dict for report
-    results = {
-        "model": model,
-        "source": source,
-        "targets": [r["target"] for r in all_results],
-        "samples": samples,
-        "all_results": all_results,
-        "execution_time": f"{execution_time:.2f}s",
+    languages_data = {}
+    for r in all_results:
+        languages_data[r["target"]] = {
+            "metrics": r["metrics"],
+            "sentences": r["sentences"],
+            "samples": len(r["sentences"]),
+        }
+
+    # Calculate summary and rankings
+    import statistics
+    bleu_scores = [d["metrics"]["bleu"] for d in languages_data.values()]
+    chrf_scores = [d["metrics"]["chrf"] for d in languages_data.values()]
+
+    summary = {
+        "num_languages": len(languages_data),
+        "bleu": {
+            "mean": statistics.mean(bleu_scores) if bleu_scores else 0,
+            "median": statistics.median(bleu_scores) if bleu_scores else 0,
+            "min": min(bleu_scores) if bleu_scores else 0,
+            "max": max(bleu_scores) if bleu_scores else 0,
+        },
+        "chrf": {
+            "mean": statistics.mean(chrf_scores) if chrf_scores else 0,
+            "median": statistics.median(chrf_scores) if chrf_scores else 0,
+            "min": min(chrf_scores) if chrf_scores else 0,
+            "max": max(chrf_scores) if chrf_scores else 0,
+        },
     }
 
-    report_gen = HTMLReportGenerator()
-    report_gen.generate(results, output_file)
+    bleu_ranking = sorted(
+        [(lang, d["metrics"]["bleu"], d["samples"]) for lang, d in languages_data.items()],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    chrf_ranking = sorted(
+        [(lang, d["metrics"]["chrf"], d["samples"]) for lang, d in languages_data.items()],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+
+    report_gen = MultiReportGenerator()
+    report_gen.generate(
+        results={
+            "results": languages_data,
+            "summary": summary,
+            "rankings": {"bleu": bleu_ranking, "chrf": chrf_ranking},
+        },
+        output_file=output_file,
+        model=model,
+        samples_per_lang=samples,
+        corpus="wikimedia",
+    )
 
     console.print(f"\n[green]Report saved to: {output_file}[/green]")
     console.print(f"[green]Execution time: {execution_time:.2f}s[/green]")
