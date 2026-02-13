@@ -1,6 +1,6 @@
 # OPUS-LLM-Benchmark
 
-A CLI tool to benchmark LLM translations using OPUS parallel corpora via OpenRouter API.
+A CLI tool to benchmark LLM translations using local parallel corpora via OpenRouter API.
 
 ## Features
 
@@ -35,19 +35,31 @@ export OPENROUTER_API_KEY=your_api_key_here
 opus-benchmark config set-api-key
 ```
 
+### Prepare your data
+```bash
+# Drop ZIP files in data/tatoeba/
+# ZIP should contain: Tatoeba.cs-en.cs, Tatoeba.cs-en.en, etc.
+
+# Convert ZIP to TXT format
+opus-benchmark convert
+```
+
 ### Run a benchmark
 ```bash
-# Quick test (10 sentences, free router)
-opus-benchmark run --corpus OpenSubtitles --source en --target de
+# Run benchmark (uses data/tatoeba/en-de.txt)
+opus-benchmark run --target de
 
-# Standard evaluation (100 sentences)
-opus-benchmark run --corpus Europarl --source en --target fr --samples 100
-
-# Specific model
-opus-benchmark run --corpus OpenSubtitles --source en --target ja --model openai/gpt-4o-mini
+# Multi-language benchmark (all pairs in data/tatoeba/)
+opus-benchmark run-multi
 ```
 
 ## Commands
+
+### Convert
+```bash
+# Convert ZIP files to parallel corpus format
+opus-benchmark convert
+```
 
 ### Configuration
 ```bash
@@ -61,27 +73,17 @@ opus-benchmark config show
 opus-benchmark config set-model openai/gpt-4o-mini
 ```
 
-### Discovery
-```bash
-# List available corpora
-opus-benchmark list corpora
-
-# List target languages for English
-opus-benchmark list targets --source en
-
-# List available pairs in a corpus
-opus-benchmark list pairs --corpus Europarl --source en
-```
-
 ### Benchmark
 ```bash
 # Run benchmark with options
 opus-benchmark run \
-    --corpus OpenSubtitles \
-    --source en \
     --target de \
+    --source en \
     --samples 100 \
     --model openrouter
+
+# Run all language pairs
+opus-benchmark run-multi
 ```
 
 ### Reporting
@@ -107,10 +109,13 @@ Targets:
 - PL, PT, RO, RU, SK, SL, SV, TH, TR, UK
 - VI, ZH
 
-## Supported Corpora
+## Data Format
 
-1. **OpenSubtitles** - Conversational data, largest corpus
-2. **Europarl** - Formal political text, high quality
+Place ZIP files containing OPUS parallel corpora in `data/tatoeba/`. Each ZIP should contain:
+- `Tatoeba.langpair.source` (e.g., `Tatoeba.cs-en.cs`)
+- `Tatoeba.langpair.target` (e.g., `Tatoeba.cs-en.en`)
+
+The `convert` command transforms these into simple TXT files (one sentence per line) for benchmarking.
 
 ## Metrics
 
@@ -136,7 +141,6 @@ Configuration is stored in `~/.config/opus-benchmark/config.yaml`:
 ```yaml
 api_key: your_openrouter_api_key
 default_model: openrouter
-default_corpus: OpenSubtitles
 ```
 
 ## License
