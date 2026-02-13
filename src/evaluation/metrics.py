@@ -197,4 +197,6 @@ class TranslationEvaluator:
             return score * 100
         except Exception as e:
             logger.error(f"METEOR sentence failed: {e}")
+            logger.error(f"References: {references}")
+            logger.error(f"Hypothesis: {hypothesis}")
             return 0.0
