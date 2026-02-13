@@ -1,0 +1,26 @@
+# OPUS-LLM-Benchmark Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core Dependencies
+requests>=2.31.0          # HTTP client
+sacrebleu>=2.4.0          # BLEU, chrF metrics
+nltk>=3.8.0              # METEOR metric
+
+# CLI & UI
+click>=8.1.0             # CLI framework
+rich>=13.5.0             # Terminal output
+tqdm>=4.65.0            # Progress bars
+
+# Reporting
+jinja2>=3.1.0            # HTML templating
+plotly>=5.15.0          # Interactive charts
+
+# Utilities
+pyyaml>=6.0              # Config management
+python-dotenv>=1.0.0    # Environment variables
+
+# Development (optional)
+# pytest>=7.0.0          # Testing
+# pytest-cov>=4.0.0      # Coverage
+# black>=23.0.0         # Formatting
+# isort>=5.12.0         # Imports

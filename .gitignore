@@ -45,9 +45,8 @@ cache/
 *.cache
 
 # Data
-data/
-*.txt
-*.zip
+data/tatoeba/*.txt
+data/tatoeba/*.zip
 
 # Reports
 reports/*.html
