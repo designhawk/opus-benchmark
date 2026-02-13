@@ -33,6 +33,9 @@ export OPENROUTER_API_KEY=your_api_key_here
 
 # Or set it interactively
 opus-benchmark config set-api-key
+
+# Python equivalent
+python -m src.cli.main config set-api-key
 ```
 
 ### Prepare your data
@@ -42,6 +45,9 @@ opus-benchmark config set-api-key
 
 # Convert ZIP to TXT format
 opus-benchmark convert
+
+# Python equivalent
+python -m src.cli.main convert
 ```
 
 ### Run a benchmark
@@ -51,6 +57,10 @@ opus-benchmark run --target de
 
 # Multi-language benchmark (all pairs in data/tatoeba/)
 opus-benchmark run-multi
+
+# Python equivalents
+python -m src.cli.main run --target de
+python -m src.cli.main run-multi
 ```
 
 ## Commands
@@ -59,6 +69,9 @@ opus-benchmark run-multi
 ```bash
 # Convert ZIP files to parallel corpus format
 opus-benchmark convert
+
+# Python equivalent
+python -m src.cli.main convert
 ```
 
 ### Configuration
@@ -71,6 +84,11 @@ opus-benchmark config show
 
 # Set default model
 opus-benchmark config set-model openai/gpt-4o-mini
+
+# Python equivalents
+python -m src.cli.main config set-api-key
+python -m src.cli.main config show
+python -m src.cli.main config set-model openai/gpt-4o-mini
 ```
 
 ### Benchmark
@@ -84,6 +102,15 @@ opus-benchmark run \
 
 # Run all language pairs
 opus-benchmark run-multi
+
+# Python equivalents
+python -m src.cli.main run \
+    --target de \
+    --source en \
+    --samples 100 \
+    --model openrouter
+
+python -m src.cli.main run-multi
 ```
 
 ### Reporting
@@ -93,6 +120,15 @@ opus-benchmark report
 
 # Compare models
 opus-benchmark compare \
+    --model-a openrouter \
+    --model-b openai/gpt-4o-mini \
+    --pairs en-de en-fr \
+    --samples 10
+
+# Python equivalents
+python -m src.cli.main report
+
+python -m src.cli.main compare \
     --model-a openrouter \
     --model-b openai/gpt-4o-mini \
     --pairs en-de en-fr \
