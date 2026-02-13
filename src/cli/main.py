@@ -723,6 +723,7 @@ def run_multi(
                         "hypothesis": translations.get(j, ""),
                         "bleu": sentence_metrics[j].get("bleu", 0),
                         "chrf": sentence_metrics[j].get("chrf", 0),
+                        "meteor": sentence_metrics[j].get("meteor", 0),
                     }
                     for j in range(len(source_sentences))
                 ],
