@@ -73,6 +73,9 @@ python -m src.cli.main list files
 
 # List available target languages
 python -m src.cli.main list targets
+
+# Check for duplicate sentences
+python -m src.cli.main list duplicates
 ```
 
 ## Commands
@@ -83,6 +86,9 @@ Convert ZIP files to parallel corpus format. Automatically removes duplicate sen
 
 ```bash
 python -m src.cli.main convert
+
+# Specify data directory
+python -m src.cli.main convert --data-dir ./data/tatoeba
 ```
 
 ### list
@@ -95,6 +101,21 @@ python -m src.cli.main list files
 
 # Show available target languages
 python -m src.cli.main list targets
+
+# Check for duplicate sentences
+python -m src.cli.main list duplicates
+```
+
+### clean
+
+Remove duplicate sentences from existing corpus files.
+
+```bash
+# Preview what would be removed
+python -m src.cli.main clean --dry-run
+
+# Actually remove duplicates
+python -m src.cli.main clean
 ```
 
 ### run
@@ -148,11 +169,15 @@ The `convert` command transforms these into simple TXT files (one sentence per l
 
 ## Metrics
 
+OPUS-Benchmark evaluates translations using three metrics:
+
 | Metric | Range | Description |
 |--------|-------|-------------|
 | BLEU | 0-100 | N-gram overlap with reference |
 | chrF++ | 0-100 | Character n-gram F-score |
 | METEOR | 0-100 | Semantic similarity with synonym matching |
+
+For detailed information on how each metric works, see [SCORING.md](SCORING.md).
 
 ## Reports
 
@@ -162,9 +187,9 @@ HTML reports are automatically generated after each benchmark run and saved to t
 - Multi benchmark: `reports/multi-benchmark_{timestamp}.html`
 
 Reports include:
-- BLEU/chrF score distributions
+- BLEU/chrF/METEOR score distributions
 - Correlation charts
-- Per-sentence results table
+- Per-sentence results table with all metrics
 - Language rankings (for multi-benchmark)
 
 ## Environment Variables
@@ -186,6 +211,12 @@ DEFAULT_MODEL=arcee-ai/trinity-large-preview:free
 | 10 | ~30 seconds |
 | 50 | ~2 minutes |
 | 100 | ~5 minutes |
+
+## Documentation
+
+- [API Guide](API.md) - Customize translation providers (DeepL, Google Translate, etc.)
+- [Scoring Explained](SCORING.md) - How BLEU, chrF++, METEOR work
+- [Developer Guide](DEVELOPER.md) - Contributing and extending the project
 
 ## License
 

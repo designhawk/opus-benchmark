@@ -23,11 +23,14 @@ Multi-language translation benchmarking tool using OPUS parallel corpora and Ope
 - Per-sentence results table
 - Language rankings (for multi-benchmark)
 - Auto-generated after each run
+- All three metrics displayed (BLEU, chrF++, METEOR)
 
 ### 4. CLI Commands
 - `convert` - Convert ZIP files to TXT format (with deduplication)
+- `clean` - Remove duplicate sentences from existing files
 - `list files` - Show corpus files with sizes and sentence counts
 - `list targets` - Show available target languages
+- `list duplicates` - Check for duplicate sentences
 - `run` - Run single language benchmark
 - `run-multi` - Run multi-language benchmark
 
@@ -47,11 +50,13 @@ opus-benchmark/
 ├── data/
 │   └── tatoeba/         # Parallel corpora files
 ├── reports/              # Generated HTML reports
-├── templates/            # HTML templates
-├── .env                  # Environment variables (API key)
+├── API.md               # Custom API integration guide
+├── SCORING.md           # Metrics explanation
+├── DEVELOPER.md         # Contributor guide
+├── .env                 # Environment variables (API key)
 ├── pyproject.toml       # Project configuration
 ├── requirements.txt     # Dependencies
-└── README.md            # Documentation
+└── README.md           # Main documentation
 ```
 
 ## Key Commands
@@ -59,6 +64,13 @@ opus-benchmark/
 ```bash
 # Convert ZIP files to TXT format (with deduplication)
 python -m src.cli.main convert
+
+# Check for duplicates
+python -m src.cli.main list duplicates
+
+# Remove duplicates
+python -m src.cli.main clean --dry-run
+python -m src.cli.main clean
 
 # List corpus files
 python -m src.cli.main list files
@@ -83,8 +95,8 @@ DEFAULT_MODEL=arcee-ai/trinity-large-preview:free
 
 ## Data Statistics
 
-- Total unique sentences: ~234,652
-- Languages available: 5 (ar, bg, cs, da, de)
+- Total unique sentences: ~2.6M
+- Languages available: 29+ (ar, bg, cs, da, de, el, es, et, fi, fr, he, hu, id, it, ja, ko, lt, lv, nl, pl, pt, ro, ru, sl, sv, th, tr, uk, vi)
 - Files stored in: `data/tatoeba/`
 
 ## Technical Details
@@ -104,14 +116,26 @@ DEFAULT_MODEL=arcee-ai/trinity-large-preview:free
 - Automatic retry on 429 errors
 - Exponential backoff
 
+### Metrics
+- **BLEU**: N-gram precision (sacrebleu)
+- **chrF++**: Character n-gram F-score (sacrebleu)
+- **METEOR**: Semantic similarity (NLTK WordNet)
+
 ## Ready for Production
 
 All systems operational:
 - ✅ CLI commands functional
 - ✅ Data conversion with deduplication
 - ✅ Random sampling implemented
-- ✅ HTML reports generating
+- ✅ HTML reports generating (with all 3 metrics)
 - ✅ Configuration via .env file
+
+## Documentation
+
+- [README.md](README.md) - Main documentation
+- [API.md](API.md) - Custom translation API guide
+- [SCORING.md](SCORING.md) - Metrics explanation
+- [DEVELOPER.md](DEVELOPER.md) - Contributor guide
 
 ## Next Steps (Optional)
 
@@ -119,6 +143,7 @@ All systems operational:
 2. Run full benchmark across all languages
 3. Compare different models
 4. Export results to CSV/JSON
+5. Add more translation API providers (DeepL, Google Translate, etc.)
 
 ---
-Generated: $(date)
+Generated: 2026-02-13
