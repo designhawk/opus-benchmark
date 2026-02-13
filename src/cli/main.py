@@ -330,6 +330,76 @@ def list_duplicates(data_dir):
     console.print(table)
 
 
+@main.command("clean")
+@click.option(
+    "--data-dir",
+    default="./data/tatoeba",
+    help="Directory containing parallel corpus files",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be removed without actually removing",
+)
+def clean(data_dir, dry_run):
+    """Remove duplicate sentences from corpus files."""
+    import os
+    data_dir = str(data_dir)
+    
+    if not os.path.exists(data_dir):
+        console.print(f"[red]Directory not found: {data_dir}[/red]")
+        return
+
+    txt_files = [f for f in os.listdir(data_dir) if f.endswith('.txt')]
+    
+    if not txt_files:
+        console.print(f"[yellow]No .txt files found in {data_dir}[/yellow]")
+        return
+
+    if dry_run:
+        console.print("[yellow]DRY RUN - No files will be modified[/yellow]\n")
+
+    total_removed = 0
+    total_kept = 0
+
+    for filename in sorted(txt_files):
+        file_path = os.path.join(data_dir, filename)
+        
+        sources = set()
+        unique_lines = []
+        duplicates = 0
+        
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    parts = line.strip().split("\t")
+                    src = parts[0] if parts else ""
+                    if src in sources:
+                        duplicates += 1
+                    else:
+                        sources.add(src)
+                        unique_lines.append(line.strip())
+
+        total_removed += duplicates
+        total_kept += len(unique_lines)
+
+        if duplicates > 0:
+            action = "Would remove" if dry_run else "Removed"
+            console.print(f"  {action} {duplicates:,} duplicates from {filename} (kept {len(unique_lines):,})")
+            
+            if not dry_run:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    for line in unique_lines:
+                        f.write(line + "\n")
+
+    console.print(f"\n[green]Total: {total_kept:,} unique sentences kept[/green]")
+    if total_removed > 0:
+        if dry_run:
+            console.print(f"[yellow]Would remove {total_removed:,} duplicates[/yellow]")
+        else:
+            console.print(f"[green]Removed {total_removed:,} duplicates[/green]")
+
+
 @list.command("files")
 @click.option(
     "--data-dir",
