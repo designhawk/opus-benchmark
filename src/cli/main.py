@@ -36,7 +36,7 @@ def load_parallel_sentences(
 ) -> Tuple[List[str], List[str]]:
     """Load parallel sentences from a file.
 
-    File format: source ||| target (one pair per line)
+    File format: source[TAB]target (one pair per line)
     """
     if not file_path.exists():
         return [], []
@@ -47,8 +47,8 @@ def load_parallel_sentences(
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if " ||| " in line:
-                parts = line.split(" ||| ", 1)
+            if "\t" in line:
+                parts = line.split("\t", 1)
                 if len(parts) == 2:
                     source_sentences.append(parts[0])
                     target_sentences.append(parts[1])
