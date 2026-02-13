@@ -165,6 +165,7 @@ def run_benchmark(
                     "hypothesis": translations.get(i, ""),
                     "bleu": sentence_metrics[i].get("bleu", 0),
                     "chrf": sentence_metrics[i].get("chrf", 0),
+                    "meteor": sentence_metrics[i].get("meteor", 0),
                 }
                 for i in range(len(source_sentences))
             ],

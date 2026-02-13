@@ -42,14 +42,17 @@ class HTMLReportGenerator:
 
         bleu_distribution = [s.get("bleu", 0) for s in sentences]
         chrf_distribution = [s.get("chrf", 0) for s in sentences]
+        meteor_distribution = [s.get("meteor", 0) for s in sentences]
 
         fig = make_subplots(
             rows=2,
-            cols=2,
+            cols=3,
             subplot_titles=(
                 "BLEU Score Distribution",
                 "chrF Score Distribution",
+                "METEOR Score Distribution",
                 "BLEU vs chrF Correlation",
+                "BLEU vs METEOR Correlation",
                 "Metrics Summary",
             ),
         )
@@ -77,6 +80,17 @@ class HTMLReportGenerator:
         )
 
         fig.add_trace(
+            go.Histogram(
+                x=meteor_distribution,
+                nbinsx=20,
+                name="METEOR",
+                marker_color="#FF9800",
+            ),
+            row=1,
+            col=3,
+        )
+
+        fig.add_trace(
             go.Scatter(
                 x=bleu_distribution,
                 y=chrf_distribution,
@@ -86,6 +100,18 @@ class HTMLReportGenerator:
             ),
             row=2,
             col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=bleu_distribution,
+                y=meteor_distribution,
+                mode="markers",
+                name="Sentences",
+                marker=dict(size=8, opacity=0.7),
+            ),
+            row=2,
+            col=2,
         )
 
         metrics_names = ["BLEU", "chrF", "METEOR"]
@@ -103,12 +129,12 @@ class HTMLReportGenerator:
                 marker_color=["#2196F3", "#4CAF50", "#FF9800"],
             ),
             row=2,
-            col=2,
+            col=3,
         )
 
         fig.update_layout(
             title_text=f"Translation Benchmark Report: {results.get('model', 'Unknown Model')}",
-            height=800,
+            height=900,
             showlegend=False,
         )
 
@@ -336,6 +362,7 @@ class HTMLReportGenerator:
                         <th>Hypothesis</th>
                         <th>BLEU</th>
                         <th>chrF</th>
+                        <th>METEOR</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -369,6 +396,7 @@ class HTMLReportGenerator:
                 <td>{self._escape_html(sent.get("hypothesis", ""))}</td>
                 <td>{sent.get("bleu", 0):.2f}</td>
                 <td>{sent.get("chrf", 0):.2f}</td>
+                <td>{sent.get("meteor", 0):.2f}</td>
             </tr>
             """
             rows.append(row)
