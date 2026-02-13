@@ -672,6 +672,14 @@ def run_multi(
             f"\n[{i}/{len(languages)}] Processing {lang_info['name']} ({target.upper()})..."
         )
 
+        # Warn about CJK languages
+        cjk_langs = ["ja", "zh", "ko"]
+        if target in cjk_langs:
+            console.print(
+                f"  [yellow]Note: BLEU/METEOR may show ~0 for CJK languages. "
+                f"Use chrF++ for accurate scoring.[/yellow]"
+            )
+
         # Load sentences
         file_path = data_path / f"{source}-{target}.txt"
         source_sentences, target_sentences = load_parallel_sentences(file_path)

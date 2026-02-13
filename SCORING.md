@@ -285,3 +285,52 @@ Each metric captures different aspects of translation quality. For comprehensive
 - Report all three metrics
 - Look at correlations between them
 - Pay attention to outlier sentences
+
+---
+
+## CJK Languages (Japanese, Chinese, Korean)
+
+### The Problem
+
+Japanese, Chinese, and Korean (CJK) languages don't use spaces between words. This affects how metrics are calculated:
+
+| Metric | How it works | CJK Support |
+|--------|-------------|-------------|
+| **BLEU** | Word n-grams (splits by spaces) | ❌ Poor - can't segment words |
+| **chrF++** | Character n-grams | ✅ Works well |
+| **METEOR** | Word-level alignment with synonyms | ❌ Poor - can't segment words |
+
+### Why BLEU and METEOR Show 0 for CJK
+
+```
+English: "Hello world" → tokens: ["Hello", "world"]
+Japanese: "こんにちは世界" → tokens: ["こんにちは世界"] (single token!)
+```
+
+Without word segmentation, BLEU can only match at the character level, resulting in near-zero scores.
+
+### Recommended: Use chrF++ for CJK
+
+For Japanese, Chinese, and Korean languages:
+- **Ignore BLEU and METEOR scores** - they will be 0 or near-0
+- **Use chrF++ as the primary metric** - it works at character level
+- chrF++ scores of 40-60 are typical for good translations
+
+### Example Scores
+
+| Language | BLEU | chrF++ | METEOR |
+|----------|------|--------|--------|
+| English→German | 30-50 | 50-70 | 40-60 |
+| English→French | 30-50 | 50-70 | 40-60 |
+| English→Japanese | ~0 | 40-60 | ~0 |
+| English→Chinese | ~0 | 40-60 | ~0 |
+| English→Korean | ~0 | 40-60 | ~0 |
+
+### Adding Word Segmentation (Advanced)
+
+For better BLEU/METEOR on CJK, you could integrate:
+- **Japanese**: Sudachi, MeCab, or Janome
+- **Chinese**: jieba, pkuseg
+- **Korean**: KoNLPy
+
+This would require modifying `src/evaluation/metrics.py` to pre-segment CJK text before calculating BLEU/METEOR.
