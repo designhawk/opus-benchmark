@@ -9,6 +9,9 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 import logging
 
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import click
 from rich.console import Console
 from rich.table import Table
