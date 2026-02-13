@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 import logging
 
 import click
@@ -14,14 +14,13 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
-from rich.prompt import Prompt
 from rich.box import SIMPLE
 
 from utils.config import Config
-from data.corpus import OPUSCorpusDownloader
 from llm.translator import LLMTranslator
 from evaluation.metrics import TranslationEvaluator
 from reporting.html_report import HTMLReportGenerator
+from config.languages import TARGET_LANGUAGES, DEFAULT_LANGUAGES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,144 +28,61 @@ logger = logging.getLogger(__name__)
 console = Console(force_terminal=True)
 
 
-def show_corpus_menu(
-    corpora: list,
-    title: str,
-    source: str,
-    target: str,
-    show_all: bool = False,
-) -> Optional[Dict[str, str]]:
-    """Display corpus selection menu."""
-    if not corpora:
-        console.print("[red]No corpora found matching criteria.[/red]")
-        return None
+def load_parallel_sentences(
+    file_path: Path,
+) -> Tuple[List[str], List[str]]:
+    """Load parallel sentences from a file.
 
-    console.print()
-    count_info = (
-        f"({len(corpora)} corpora)" if show_all else f"({len(corpora)} corpora < 1GB)"
-    )
-    panel_title = f"Select Corpus for {source.upper()} -> {target.upper()} {count_info}"
+    File format: source ||| target (one pair per line)
+    """
+    if not file_path.exists():
+        return [], []
 
-    console.print(
-        Panel.fit(
-            panel_title, style="cyan bold", subtitle="Choose from available options"
-        )
-    )
-    console.print()
+    source_sentences = []
+    target_sentences = []
 
-    for i, corp in enumerate(corpora[:10], 1):
-        name = corp.get("name", "Unknown")
-        version = corp.get("version", "")
-        size = corp.get("size_formatted", "?")
-        pairs = corp.get("alignment_pairs", 0)
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if " ||| " in line:
+                parts = line.split(" ||| ", 1)
+                if len(parts) == 2:
+                    source_sentences.append(parts[0])
+                    target_sentences.append(parts[1])
 
-        try:
-            pairs_str = f"{int(pairs):,}"
-        except (ValueError, TypeError):
-            pairs_str = str(pairs)
-
-        row = f"  [{i}] {name:<20} {size:<10}  ({pairs_str} pairs)"
-        if version:
-            if not version.startswith("v"):
-                version = "v" + version
-            row += f"  {version}"
-        console.print(row)
-
-    console.print()
-
-    options = []
-    for i in range(1, min(len(corpora), 10) + 1):
-        options.append(str(i))
-
-    if len(corpora) > 10:
-        options.append("N")
-
-    options.extend(["A", "S", "X"])
-
-    menu_text = "  [1-10] Select corpus"
-    if len(corpora) > 10:
-        menu_text += "  [N] Next page"
-    menu_text += "  [A] Show ALL corpora"
-    menu_text += "  [S] Search by name"
-    menu_text += "  [X] Cancel"
-
-    console.print(menu_text)
-    console.print()
-
-    while True:
-        choice = Prompt.ask("[cyan]Selection[/cyan]", choices=options, default="1")
-
-        if choice.upper() == "X":
-            console.print("[yellow]Cancelled.[/yellow]")
-            sys.exit(0)
-
-        if choice.upper() == "A":
-            return {"id": "all", "name": "Show All"}
-
-        if choice.upper() == "S":
-            search_query = Prompt.ask("[cyan]Search corpus name[/cyan]", default="")
-            if search_query:
-                return {
-                    "id": f"search:{search_query}",
-                    "name": f"Search: {search_query}",
-                }
-            continue
-
-        if choice.upper() == "N" and len(corpora) > 10:
-            return show_corpus_menu(corpora[10:], title, source, target, show_all=True)
-
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(corpora) and idx < 10:
-                selected = corpora[idx]
-                return {"id": selected["name"], "name": selected["name"]}
-        except ValueError:
-            pass
-
-        console.print("[red]Invalid selection. Try again.[/red]")
+    return source_sentences, target_sentences
 
 
-def select_corpus_interactive(target: str, source: str = "en") -> Dict[str, str]:
-    """Show interactive corpus selection menu."""
-    downloader = OPUSCorpusDownloader()
+def get_available_language_pairs(
+    data_dir: Path,
+    source: str = "en",
+) -> List[str]:
+    """Get available language pairs from data directory.
 
-    console.print(
-        f"\n[cyan]Fetching corpora for {source.upper()} -> {target.upper()}...[/cyan]\n"
-    )
+    Scans for files matching {source}-{target}.txt pattern.
+    """
+    if not data_dir.exists():
+        return []
 
-    small_corpora = downloader.get_small_corpora(source, target, max_mb=1000)
-    all_corpora = downloader.get_all_corpora_for_pair(source, target)
+    pairs = []
+    for file_path in data_dir.glob(f"{source}-*.txt"):
+        # Extract target language from filename (e.g., en-de.txt -> de)
+        stem = file_path.stem
+        if stem.startswith(f"{source}-"):
+            target = stem[len(source) + 1 :]
+            pairs.append(target)
 
-    if not small_corpora:
-        console.print("[red]No small corpora found. Showing all available...[/red]")
-        small_corpora = all_corpora
-
-    result = show_corpus_menu(small_corpora, "", source, target, show_all=False)
-
-    if result is None:
-        sys.exit(1)
-
-    if result["id"] == "all":
-        result = show_corpus_menu(all_corpora, "", source, target, show_all=True)
-        if result is None or result["id"] in ["all", "X"]:
-            sys.exit(1)
-
-    if result["id"].startswith("search:"):
-        search_query = result["id"].split(":", 1)[1]
-        search_results = downloader.search_corpora(source, target, search_query)
-        result = show_corpus_menu(search_results, "", source, target, show_all=True)
-        if result is None or result["id"] in ["all", "X"]:
-            sys.exit(1)
-
-    return result
+    return sorted(pairs)
 
 
 def run_benchmark(
-    corpus_choice: Dict[str, str],
+    source_sentences: List[str],
+    target_sentences: List[str],
     target: str,
     num_samples: int,
     model: str,
     source: str = "en",
+    corpus_name: str = "tatoeba",
 ):
     """Run the translation benchmark."""
     config = Config()
@@ -175,21 +91,21 @@ def run_benchmark(
 
     api_key = config.get_api_key()
 
-    corpus_id = corpus_choice["id"]
-    corpus_name = corpus_choice["name"]
+    # Sample sentences if needed
+    if len(source_sentences) > num_samples:
+        import random
 
-    if corpus_id == "auto":
-        corpus_display = "Auto (smallest available)"
-    else:
-        corpus_display = corpus_name
+        indices = random.sample(range(len(source_sentences)), num_samples)
+        source_sentences = [source_sentences[i] for i in indices]
+        target_sentences = [target_sentences[i] for i in indices]
 
     console.print(
         Panel(
             Text(
                 f"Starting Benchmark\n\n"
-                f"Corpus: {corpus_display}\n"
+                f"Corpus: {corpus_name}\n"
                 f"Languages: {source.upper()} -> {target.upper()}\n"
-                f"Samples: {num_samples}\n"
+                f"Samples: {len(source_sentences)}\n"
                 f"Model: {model}",
                 style="cyan",
             ),
@@ -201,35 +117,9 @@ def run_benchmark(
     start_time = time.time()
 
     try:
-        downloader = OPUSCorpusDownloader()
-
-        console.print("\n[bold cyan]Step 1: Downloading corpus...[/bold cyan]")
-        result = downloader.download_with_fallback(
-            preferred_corpus=corpus_id,
-            source=source,
-            target=target,
-            num_samples=num_samples,
-        )
-
-        source_sentences, target_sentences = result["data"]
-        used_corpus = result["corpus_used"]
-
-        if result["used_fallback"]:
-            console.print(
-                f"[yellow]Note: Fell back to {used_corpus} (preferred: {corpus_name})[/yellow]"
-            )
-
-        if not source_sentences:
-            console.print("[red]Error: No sentences downloaded[/red]")
-            sys.exit(1)
-
-        console.print(
-            f"[green]Downloaded {len(source_sentences)} sentence pairs from {used_corpus}[/green]"
-        )
-
         translator = LLMTranslator(api_key, model)
 
-        console.print("\n[bold cyan]Step 2: Translating...[/bold cyan]")
+        console.print("\n[bold cyan]Step 1: Translating...[/bold cyan]")
         translations = translator.translate_batch(
             texts=source_sentences,
             source_lang=source,
@@ -239,7 +129,7 @@ def run_benchmark(
 
         evaluator = TranslationEvaluator()
 
-        console.print("\n[bold cyan]Step 3: Evaluating...[/bold cyan]")
+        console.print("\n[bold cyan]Step 2: Evaluating...[/bold cyan]")
         references = [[ref] for ref in target_sentences]
         hypotheses = [translations.get(i, "") for i in range(len(source_sentences))]
 
@@ -259,10 +149,10 @@ def run_benchmark(
 
         results: Dict[str, Any] = {
             "model": model,
-            "corpus": used_corpus,
+            "corpus": corpus_name,
             "source": source,
             "target": target,
-            "num_samples": num_samples,
+            "num_samples": len(source_sentences),
             "metrics": metrics,
             "sentences": [
                 {
@@ -286,7 +176,7 @@ def run_benchmark(
 
         report_file = (
             output_dir
-            / f"benchmark_{source.upper()}-{target.upper()}_{used_corpus}_{timestamp}.html"
+            / f"benchmark_{source.upper()}-{target.upper()}_{corpus_name}_{timestamp}.html"
         )
         report_generator.generate(results, str(report_file))
 
@@ -349,7 +239,6 @@ def use_free_models():
 
     console.print("[cyan]Switching to OpenRouter FREE tier...[/cyan]\n")
 
-    # List of recommended free models
     free_models = [
         (
             "arcee-ai/trinity-large-preview:free",
@@ -393,158 +282,52 @@ def list():
     pass
 
 
-@list.command("corpora")
-def list_corpora():
-    """List available corpora."""
-    downloader = OPUSCorpusDownloader()
-
-    console.print("\n[cyan]Fetching corpora...[/cyan]\n")
-
-    all_corpora = downloader.get_all_corpora_for_pair("en", "de")
-    small_corpora = [c for c in all_corpora if c["size_bytes"] <= 1000 * 1024 * 1024]
-
-    console.print(f"[cyan]Total corpora for EN-DE: {len(all_corpora)}[/cyan]")
-    console.print(f"[green]Small corpora (< 1GB): {len(small_corpora)}[/green]\n")
-
-    table = Table(title="Small Corpora (< 1GB)", box=SIMPLE)
-    table.add_column("Corpus", style="cyan")
-    table.add_column("Size", style="green")
-    table.add_column("Pairs", style="white")
-    table.add_column("Version", style="dim")
-
-    for corp in small_corpora[:20]:
-        pairs = corp.get("alignment_pairs", 0)
-        try:
-            pairs_str = f"{int(pairs):,}"
-        except (ValueError, TypeError):
-            pairs_str = str(pairs)
-        table.add_row(
-            corp["name"],
-            corp["size_formatted"],
-            pairs_str,
-            corp.get("version", ""),
-        )
-
-    console.print(table)
-
-
 @list.command("targets")
-@click.option("--source", default="en", help="Source language code")
-@click.option("--corpus", help="Filter by corpus")
-def list_targets(source: str, corpus: Optional[str]):
+@click.option(
+    "--source",
+    default="en",
+    help="Source language code",
+)
+@click.option(
+    "--data-dir",
+    default="./data/tatoeba",
+    help="Directory containing parallel corpus files",
+)
+def list_targets(source: str, data_dir: str):
     """List available target languages for a source."""
-    downloader = OPUSCorpusDownloader()
+    data_path = Path(data_dir)
+    available_pairs = get_available_language_pairs(data_path, source)
 
-    language_names = {
-        "ar": "Arabic",
-        "bg": "Bulgarian",
-        "cs": "Czech",
-        "da": "Danish",
-        "de": "German",
-        "el": "Greek",
-        "es": "Spanish",
-        "et": "Estonian",
-        "fi": "Finnish",
-        "fr": "French",
-        "he": "Hebrew",
-        "hu": "Hungarian",
-        "id": "Indonesian",
-        "it": "Italian",
-        "ja": "Japanese",
-        "ko": "Korean",
-        "lt": "Lithuanian",
-        "lv": "Latvian",
-        "nb": "Norwegian",
-        "nl": "Dutch",
-        "pl": "Polish",
-        "pt": "Portuguese",
-        "ro": "Romanian",
-        "ru": "Russian",
-        "sk": "Slovak",
-        "sl": "Slovenian",
-        "sv": "Swedish",
-        "th": "Thai",
-        "tr": "Turkish",
-        "uk": "Ukrainian",
-        "vi": "Vietnamese",
-        "zh": "Chinese",
-    }
+    table = Table(title=f"Available Targets for {source.upper()}")
+    table.add_column("Code", style="cyan")
+    table.add_column("Language", style="green")
 
-    if corpus:
-        pairs = downloader.get_available_pairs(corpus, source)
-        table = Table(title=f"Available Targets in {corpus} ({source.upper()})")
-        table.add_column("Code", style="cyan")
-        table.add_column("Language", style="green")
-        for target in sorted(pairs):
-            name = language_names.get(target.lower(), target)
-            table.add_row(target.upper(), name)
-        console.print(table)
+    # If no files found, show available from config
+    if not available_pairs:
+        console.print(f"[yellow]No corpus files found in {data_dir}[/yellow]")
+        console.print("[dim]Available languages in config:[/dim]")
+        for target in sorted(TARGET_LANGUAGES.keys()):
+            if target != source:
+                lang_info = TARGET_LANGUAGES[target]
+                table.add_row(target.upper(), lang_info["name"])
     else:
-        console.print("[cyan]Fetching available targets...[/cyan]\n")
-
-        all_corpora = downloader.get_all_corpora_for_pair(source, "de")
-        unique_targets = set()
-        for corp in all_corpora:
-            if corp.get("target"):
-                unique_targets.add(corp["target"].upper())
-
-        table = Table(title=f"Available Targets for {source.upper()}")
-        table.add_column("Code", style="cyan")
-        table.add_column("Language", style="green")
-
-        for target in sorted(unique_targets):
-            name = language_names.get(target.lower(), target)
-            table.add_row(target.upper(), name)
-
-        console.print(table)
-
-
-@list.command("pairs")
-@click.option("--source", default="en", help="Source language")
-def list_pairs(source: str):
-    """List available language pairs."""
-    downloader = OPUSCorpusDownloader()
-
-    console.print(f"\n[cyan]Fetching corpora for {source.upper()}...[/cyan]\n")
-
-    all_corpora = downloader.get_all_corpora_for_pair(source, "de")
-
-    corpora_info = {}
-    for corp in all_corpora:
-        name = corp.get("name", "Unknown")
-        if name not in corpora_info:
-            corpora_info[name] = corp
-
-    small_corpora = [
-        c for c in corpora_info.values() if c["size_bytes"] <= 1000 * 1024 * 1024
-    ]
-
-    table = Table(title=f"Available Pairs for {source.upper()} (small corpora < 1GB)")
-    table.add_column("Corpus", style="cyan")
-    table.add_column("Size", style="green")
-    table.add_column("Pairs", style="white")
-
-    for corp in small_corpora[:20]:
-        pairs = corp.get("alignment_pairs", 0)
-        try:
-            pairs_str = f"{int(pairs):,}"
-        except (ValueError, TypeError):
-            pairs_str = str(pairs)
-        table.add_row(
-            corp["name"],
-            corp["size_formatted"],
-            pairs_str,
-        )
+        for target in available_pairs:
+            lang_name = TARGET_LANGUAGES.get(target, {}).get("name", target)
+            table.add_row(target.upper(), lang_name)
 
     console.print(table)
 
 
 @main.command()
-@click.option("--target", required=True, help="Target language code")
+@click.option(
+    "--target",
+    required=True,
+    help="Target language code (e.g., de, fr, ja)",
+)
 @click.option(
     "--samples",
     default=10,
-    type=click.Choice(["10", "100", "500", "1000"]),
+    type=int,
     help="Number of samples",
 )
 @click.option(
@@ -552,15 +335,73 @@ def list_pairs(source: str):
     default="arcee-ai/trinity-large-preview:free",
     help="OpenRouter model",
 )
-def run(target: str, samples: str, model: str):
-    """Run a translation benchmark with interactive corpus selection."""
-    corpus_choice = select_corpus_interactive(target)
-    run_benchmark(corpus_choice, target, int(samples), model)
+@click.option(
+    "--source",
+    default="en",
+    help="Source language code",
+)
+@click.option(
+    "--file",
+    "corpus_file",
+    default=None,
+    help="Path to corpus file (auto-detected if not specified)",
+)
+@click.option(
+    "--data-dir",
+    default="./data/tatoeba",
+    help="Directory containing parallel corpus files",
+)
+def run(
+    target: str,
+    samples: int,
+    model: str,
+    source: str,
+    corpus_file: Optional[str],
+    data_dir: str,
+):
+    """Run a translation benchmark."""
+    data_path = Path(data_dir)
+
+    # Determine corpus file path
+    if corpus_file:
+        file_path = Path(corpus_file)
+    else:
+        # Auto-detect from data/tatoeba/en-{target}.txt
+        file_path = data_path / f"{source}-{target}.txt"
+
+    # Load sentences
+    console.print(f"[cyan]Loading sentences from {file_path}...[/cyan]")
+    source_sentences, target_sentences = load_parallel_sentences(file_path)
+
+    if not source_sentences or not target_sentences:
+        console.print(f"[red]No sentences found in {file_path}[/red]")
+        console.print(
+            f"[dim]Place corpus files in {data_dir}/ or use --file to specify a path[/dim]"
+        )
+        console.print("[dim]Expected format: source ||| target (one per line)[/dim]")
+        sys.exit(1)
+
+    console.print(f"[green]Loaded {len(source_sentences)} sentence pairs[/green]")
+
+    run_benchmark(
+        source_sentences=source_sentences,
+        target_sentences=target_sentences,
+        target=target,
+        num_samples=samples,
+        model=model,
+        source=source,
+    )
 
 
 @main.command()
-@click.option("--input", help="Input results file or directory")
-@click.option("--output", help="Output HTML file")
+@click.option(
+    "--input",
+    help="Input results file or directory",
+)
+@click.option(
+    "--output",
+    help="Output HTML file",
+)
 def report(input: Optional[str], output: Optional[str]):
     """Generate HTML report from results."""
     if not input:
@@ -601,206 +442,23 @@ def report(input: Optional[str], output: Optional[str]):
     console.print(f"[green]Report saved to: {report_file}[/green]")
 
 
-@main.group()
-def download():
-    """Download parallel corpora."""
-    pass
-
-
-@download.command("tatoeba")
-@click.option(
-    "--langs",
-    default=None,
-    help="Comma-separated language codes",
-)
-@click.option(
-    "--all",
-    is_flag=True,
-    help="Download all available Tatoeba languages",
-)
-@click.option(
-    "--max",
-    type=int,
-    default=None,
-    help="Download only N smallest corpora (by sentence count)",
-)
-@click.option(
-    "--parallel",
-    default=5,
-    type=int,
-    help="Number of parallel downloads",
-)
-@click.option(
-    "--output",
-    default="./data/tatoeba",
-    help="Output directory",
-)
-@click.option(
-    "--no-external",
-    is_flag=True,
-    help="Don't use external downloaders",
-)
-def download_tatoeba(
-    langs: Optional[str],
-    all: bool,
-    max: Optional[int],
-    parallel: int,
-    output: str,
-    no_external: bool,
-):
-    """Download Tatoeba corpus (sorted by sentence count, smallest first)."""
-    from data.tatoeba_downloader import TatoebaDownloader, get_tatoeba_languages
-
-    if all:
-        languages = get_tatoeba_languages()
-        console.print(f"Found {len(languages)} languages with Tatoeba corpus")
-    elif langs:
-        languages = [l.strip().lower() for l in langs.split(",")]
-    else:
-        # Default to top 10 smallest
-        languages = get_tatoeba_languages()[:10]
-        console.print(
-            f"No languages specified, downloading {len(languages)} smallest corpora"
-        )
-
-    downloader = TatoebaDownloader(
-        output_dir=output,
-        max_parallel=parallel,
-        use_external=not no_external,
-    )
-
-    results = downloader.download_languages(languages, max_languages=max)
-
-    if results["success"]:
-        console.print("\n[green]OK All downloads completed successfully![/green]")
-    else:
-        failed = [
-            lang for lang, success in results["downloaded"].items() if not success
-        ]
-        if failed:
-            console.print(f"\n[yellow]⚠ Failed downloads: {', '.join(failed)}[/yellow]")
-
-
-@download.command("fast")
-@click.option(
-    "--langs",
-    default=None,
-    help="Comma-separated language codes (default: de,fr,ja)",
-)
-@click.option(
-    "--all",
-    is_flag=True,
-    help="Download all 32 languages",
-)
-@click.option(
-    "--parallel",
-    default=5,
-    type=int,
-    help="Number of parallel downloads",
-)
-@click.option(
-    "--output",
-    default="./data/wikimedia",
-    help="Output directory",
-)
-@click.option(
-    "--no-external",
-    is_flag=True,
-    help="Don't use external downloaders (aria2c, wget, curl)",
-)
-def download_fast(
-    langs: Optional[str], all: bool, parallel: int, output: str, no_external: bool
-):
-    """Fast parallel download using aria2c/wget/curl (recommended)."""
-    from data.fast_downloader import FastDownloader
-    from config.languages import DEFAULT_LANGUAGES
-
-    if all:
-        languages = DEFAULT_LANGUAGES
-    elif langs:
-        languages = [l.strip() for l in langs.split(",")]
-    else:
-        languages = ["de", "fr", "ja"]
-
-    downloader = FastDownloader(
-        output_dir=output,
-        max_parallel=parallel,
-        use_external=not no_external,
-    )
-
-    results = downloader.download_languages(languages)
-
-    if results["success"]:
-        console.print("\n[green]OK All downloads completed successfully![/green]")
-    else:
-        failed = [
-            lang for lang, success in results["downloaded"].items() if not success
-        ]
-        if failed:
-            console.print(f"\n[yellow]⚠ Failed downloads: {', '.join(failed)}[/yellow]")
-
-
-@download.command("multi-lang")
-@click.option(
-    "--samples",
-    default=10,
-    type=int,
-    help="Samples per language to download",
-)
-@click.option(
-    "--corpus",
-    default="wikimedia",
-    help="Corpus name to download from",
-)
-@click.option(
-    "--langs",
-    default=None,
-    help="Comma-separated language codes (default: all 32)",
-)
-@click.option(
-    "--output",
-    default="./data/wikimedia",
-    help="Output directory for downloaded files",
-)
-def download_multi_lang(samples: int, corpus: str, langs: Optional[str], output: str):
-    """Download parallel corpora for multiple languages (legacy)."""
-    from data.multi_downloader import MultiLangDownloader
-
-    languages = None
-    if langs:
-        languages = [l.strip() for l in langs.split(",")]
-
-    downloader = MultiLangDownloader(output_dir=output)
-    results = downloader.download_all_languages(
-        corpus=corpus,
-        languages=languages,
-        samples_per_lang=samples,
-    )
-
-
-@download.command("cleanup")
+@main.command()
 @click.option(
     "--data-dir",
     default="./data/tatoeba",
-    help="Directory containing dataset files",
+    help="Directory containing ZIP files",
 )
-def download_cleanup(data_dir: str):
-    """Remove duplicate sentences from all datasets."""
-    from data.tatoeba_downloader import cleanup_all_datasets
+def convert(data_dir: str):
+    """Convert ZIP files to parallel corpus format."""
+    from data.zip_converter import convert_all
 
-    results = cleanup_all_datasets(data_dir)
+    data_path = Path(data_dir)
+    results = convert_all(data_path)
 
-    total_original = sum(orig for orig, _ in results.values())
-    total_unique = sum(uniq for _, uniq in results.values())
-    total_removed = total_original - total_unique
-
-    if total_removed > 0:
-        console.print(
-            f"\n[green]Successfully removed {total_removed:,} duplicate sentences total[/green]"
-        )
-        console.print(f"Total sentences: {total_original:,} -> {total_unique:,}")
+    if results:
+        console.print(f"\n[green]Successfully converted {len(results)} file(s)[/green]")
     else:
-        console.print("\n[dim]No duplicates found in any dataset[/dim]")
+        console.print("[yellow]No files converted[/yellow]")
 
 
 @main.command("run-multi")
@@ -818,203 +476,186 @@ def download_cleanup(data_dir: str):
 @click.option(
     "--langs",
     default=None,
-    help="Comma-separated language codes (default: all 32)",
+    help="Comma-separated language codes (default: all available)",
 )
 @click.option(
-    "--corpus",
-    default="tatoeba",
-    help="Corpus name (default: tatoeba)",
+    "--source",
+    default="en",
+    help="Source language code",
 )
 @click.option(
     "--data-dir",
     default="./data/tatoeba",
-    help="Directory with downloaded parallel corpora (default: ./data/tatoeba)",
-)
-@click.option(
-    "--checkpoint",
-    default="./data/wikimedia/checkpoint.json",
-    help="Checkpoint file for resume",
+    help="Directory with parallel corpus files (default: ./data/tatoeba)",
 )
 @click.option(
     "--output",
     default=None,
     help="Output HTML file (auto-generated if not specified)",
 )
-@click.option(
-    "--resume",
-    is_flag=True,
-    default=False,
-    help="Resume from checkpoint",
-)
 def run_multi(
     samples: int,
     model: str,
     langs: Optional[str],
-    corpus: str,
+    source: str,
     data_dir: str,
-    checkpoint: str,
     output: Optional[str],
-    resume: bool,
 ):
     """Run translation benchmark across multiple languages."""
-    import time
-    from pathlib import Path as FilePath
-    from config.languages import TARGET_LANGUAGES, DEFAULT_LANGUAGES
-    from data.multi_downloader import MultiLangDownloader
-    from llm.translator import LLMTranslator
-    from evaluation.multi_evaluator import MultiLangEvaluator, CheckpointManager
-    from reporting.multi_report import MultiReportGenerator
-    from utils.config import Config
-
     config = Config()
     if not config.validate():
         sys.exit(1)
 
     api_key = config.get_api_key()
 
-    languages = None
+    # Get available language pairs from data directory
+    data_path = Path(data_dir)
+    available_pairs = get_available_language_pairs(data_path, source)
+
+    if not available_pairs:
+        console.print(f"[red]No corpus files found in {data_dir}[/red]")
+        console.print(f"[dim]Expected files: {source}-{{target}}.txt[/dim]")
+        sys.exit(1)
+
+    # Determine which languages to process
     if langs:
         languages = [l.strip().lower() for l in langs.split(",")]
+        # Filter to only available pairs
+        languages = [lang for lang in languages if lang in available_pairs]
+        if not languages:
+            console.print(f"[red]None of the specified languages are available[/red]")
+            console.print(f"[dim]Available: {', '.join(available_pairs)}[/dim]")
+            sys.exit(1)
     else:
-        languages = DEFAULT_LANGUAGES.copy()
+        languages = available_pairs.copy()
 
     console.print(
         Panel.fit(
             f"Multi-Language Translation Benchmark\n\n"
             f"Languages: {len(languages)}\n"
-            f"Samples: {samples}/language (random selection)\n"
+            f"Samples: {samples}/language\n"
             f"Model: {model}\n"
-            f"Resume: {'Yes' if resume else 'No'}",
+            f"Source: {source.upper()}",
             style="cyan bold",
         )
     )
 
     start_time = time.time()
-
-    downloader = MultiLangDownloader(output_dir=data_dir)
     translator = LLMTranslator(api_key, model)
-    evaluator = MultiLangEvaluator()
-    report_gen = MultiReportGenerator()
+    evaluator = TranslationEvaluator()
 
-    checkpoint_mgr = CheckpointManager(checkpoint_file=checkpoint)
-
-    if resume and checkpoint_mgr.data.get("status") == "in_progress":
-        console.print("[yellow]Resuming from checkpoint...[/yellow]")
-        pending_langs = checkpoint_mgr.get_pending_languages()
-        if pending_langs:
-            console.print(f"Pending languages: {len(pending_langs)}")
-        languages = pending_langs if pending_langs else languages
-    else:
-        config_dict = {
-            "model": model,
-            "samples": samples,
-            "corpus": corpus,
-        }
-        checkpoint_mgr.init_benchmark(config_dict, languages)
-
-    completed = 0
-    total = len(languages)
+    all_results = []
 
     for i, target in enumerate(languages, 1):
         lang_info = TARGET_LANGUAGES.get(target, {"name": target})
         console.print(
-            f"\n[{i}/{total}] Processing {lang_info['name']} ({target.upper()})..."
+            f"\n[{i}/{len(languages)}] Processing {lang_info['name']} ({target.upper()})..."
         )
 
-        checkpoint_mgr.update_language(target, "in_progress", samples=samples)
+        # Load sentences
+        file_path = data_path / f"{source}-{target}.txt"
+        source_sentences, target_sentences = load_parallel_sentences(file_path)
 
-        source_lines, target_lines = downloader.load_language_pair(
-            target, max_samples=samples
-        )
-
-        if not source_lines or not target_lines:
+        if not source_sentences or not target_sentences:
             console.print(f"  [yellow]No data available for {target.upper()}[/yellow]")
-            checkpoint_mgr.update_language(target, "failed", samples=0)
             continue
 
-        console.print(f"  [cyan]Translating {len(source_lines)} sentences...[/cyan]")
+        # Sample if needed
+        if len(source_sentences) > samples:
+            import random
+
+            indices = random.sample(range(len(source_sentences)), samples)
+            source_sentences = [source_sentences[idx] for idx in indices]
+            target_sentences = [target_sentences[idx] for idx in indices]
+
+        console.print(
+            f"  [cyan]Translating {len(source_sentences)} sentences...[/cyan]"
+        )
 
         translations = translator.translate_batch(
-            texts=source_lines,
-            source_lang="en",
+            texts=source_sentences,
+            source_lang=source,
             target_lang=target,
             num_samples=samples,
         )
 
         if not translations:
             console.print(f"  [red]Translation failed for {target.upper()}[/red]")
-            checkpoint_mgr.update_language(target, "failed", samples=len(source_lines))
             continue
 
         console.print(f"  [cyan]Evaluating...[/cyan]")
 
-        references = [[ref] for ref in target_lines]
-        hypotheses = [translations.get(j, "") for j in range(len(source_lines))]
+        references = [[ref] for ref in target_sentences]
+        hypotheses = [translations.get(j, "") for j in range(len(source_sentences))]
 
-        result = evaluator.evaluate_language(
-            target_lang=target,
-            references=references,
-            hypotheses=hypotheses,
+        metrics = evaluator.evaluate(references, hypotheses)
+        sentence_metrics = evaluator.evaluate_per_sentence(references, hypotheses)
+
+        all_results.append(
+            {
+                "target": target,
+                "name": lang_info["name"],
+                "metrics": metrics,
+                "sentences": [
+                    {
+                        "source": source_sentences[j],
+                        "reference": target_sentences[j],
+                        "hypothesis": translations.get(j, ""),
+                        "bleu": sentence_metrics[j].get("bleu", 0),
+                        "chrf": sentence_metrics[j].get("chrf", 0),
+                    }
+                    for j in range(len(source_sentences))
+                ],
+            }
         )
 
-        sentence_data = []
-        for j in range(len(source_lines)):
-            sent_metrics = (
-                result["sentence_metrics"][j]
-                if j < len(result["sentence_metrics"])
-                else {}
-            )
-            sentence_data.append(
-                {
-                    "source": source_lines[j],
-                    "reference": target_lines[j],
-                    "hypothesis": translations.get(j, ""),
-                    "bleu": sent_metrics.get("bleu", 0),
-                    "chrf": sent_metrics.get("chrf", 0),
-                }
-            )
-
-        checkpoint_mgr.update_language(
-            target,
-            "completed",
-            metrics=result["metrics"],
-            samples=len(source_lines),
-            result_data=sentence_data,
-        )
-
-        completed += 1
         console.print(
-            f"  [green]Done: BLEU={result['metrics']['bleu']:.1f}, chrF={result['metrics']['chrf']:.1f}[/green]"
+            f"  [green]Done: BLEU={metrics['bleu']:.1f}, chrF={metrics['chrf']:.1f}[/green]"
         )
 
     execution_time = time.time() - start_time
 
-    checkpoint_mgr.mark_complete()
-
     console.print("\n[bold cyan]Benchmark Complete![/bold cyan]")
 
-    results = evaluator.to_dict()
-    results["config"] = {
-        "model": model,
-        "samples": samples,
-        "corpus": corpus,
-        "languages": len(languages),
-        "execution_time": f"{execution_time:.2f}s",
-    }
+    # Generate summary
+    if all_results:
+        total_bleu = sum(r["metrics"]["bleu"] for r in all_results)
+        avg_bleu = total_bleu / len(all_results)
 
+        summary_table = Table(title="Summary")
+        summary_table.add_column("Language", style="cyan")
+        summary_table.add_column("BLEU", style="green")
+        summary_table.add_column("chrF++", style="green")
+
+        for result in all_results:
+            summary_table.add_row(
+                result["name"],
+                f"{result['metrics']['bleu']:.2f}",
+                f"{result['metrics']['chrf']:.2f}",
+            )
+
+        console.print(summary_table)
+        console.print(f"\n[cyan]Average BLEU: {avg_bleu:.2f}[/cyan]")
+
+    # Generate report
     if output:
         output_file = output
     else:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         output_file = f"./reports/multi-benchmark_{timestamp}.html"
 
-    report_gen.generate(
-        results=results,
-        output_file=output_file,
-        model=model,
-        samples_per_lang=samples,
-        corpus=corpus,
-    )
+    # Build results dict for report
+    results = {
+        "model": model,
+        "source": source,
+        "targets": [r["target"] for r in all_results],
+        "samples": samples,
+        "all_results": all_results,
+        "execution_time": f"{execution_time:.2f}s",
+    }
+
+    report_gen = HTMLReportGenerator()
+    report_gen.generate(results, output_file)
 
     console.print(f"\n[green]Report saved to: {output_file}[/green]")
     console.print(f"[green]Execution time: {execution_time:.2f}s[/green]")
